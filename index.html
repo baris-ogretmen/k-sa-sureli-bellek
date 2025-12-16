@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Barış Öğretmen - Türkçe & Hafıza</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@700&display=swap" rel="stylesheet">
+    <style>
+        /* TEMEL AYARLAR */
+        body {
+            margin: 0; padding: 0; overflow: hidden;
+            background-color: #2c3e50;
+            display: flex; align-items: center; justify-content: center;
+            height: 100vh; font-family: 'Nunito', sans-serif;
+            touch-action: none; user-select: none;
+        }
+
+        #game-stage {
+            position: relative;
+            width: 800px; height: 600px;
+            background: #81C784;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            border-radius: 20px;
+            overflow: hidden;
+        }
+        
+        canvas { display: block; width: 100%; height: 100%; }
+
+        /* UI KATMANI */
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; display: flex; flex-direction: column;
+        }
+
+        #top-bar {
+            padding: 15px; display: flex; justify-content: space-between; align-items: flex-start;
+            background: linear-gradient(to bottom, rgba(255,255,255,0.95), rgba(255,255,255,0));
+            height: 80px;
+        }
+
+        .hud-item {
+            background: #fff; border: 3px solid #eee; padding: 8px 15px; border-radius: 20px;
+            font-family: 'Fredoka One'; color: #555; font-size: 18px; 
+            box-shadow: 0 4px 0 rgba(0,0,0,0.1); display: flex; align-items: center; gap: 8px;
+        }
+
+        /* BATARYA */
+        #battery-wrap {
+            width: 120px; height: 24px; background: #ddd; border-radius: 12px; 
+            border: 2px solid #fff; position: relative; overflow: hidden;
+        }
+        #battery-fill { width: 100%; height: 100%; background: #4CAF50; transition: width 0.3s; }
+        #battery-txt {
+            position: absolute; top:0; left:0; width:100%; height:100%;
+            display:flex; align-items:center; justify-content:center;
+            font-size:12px; color:#fff; text-shadow:0 1px 2px #000;
+        }
+
+        /* SORU SAYACI */
+        #quest-counter {
+            background: #FF9800; color: #fff; border-color: #F57C00;
+        }
+
+        /* SORU KUTUSU */
+        #question-panel {
+            position: absolute; top: 160px; left: 50%; transform: translate(-50%, -20%) scale(0);
+            background: #fff; padding: 25px 50px; border-radius: 30px; border: 6px solid #2196F3;
+            text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: auto; z-index: 20; min-width: 350px;
+        }
+        #question-panel.active { transform: translate(-50%, 0) scale(1); }
+        #q-title { font-size: 22px; color: #555; margin-bottom: 10px; font-weight: bold; }
+        #q-target { font-size: 55px; display: block; font-family: 'Fredoka One'; color: #333; }
+        
+        .type-icon { font-size: 30px; display: block; margin-bottom: 5px; }
+
+        /* MODAL */
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            pointer-events: auto; z-index: 50; transition: opacity 0.3s;
+        }
+        .overlay.hidden { opacity: 0; pointer-events: none; }
+        
+        .modal {
+            background: #fff; padding: 35px; border-radius: 40px; text-align: center;
+            border: 8px solid #FF9800; max-width: 90%; width: 500px;
+            box-shadow: 0 0 60px rgba(255,152,0,0.5);
+        }
+
+        .input-field {
+            padding: 15px; font-size: 24px; border-radius: 15px; border: 3px solid #ccc;
+            width: 70%; margin: 20px 0; font-family: 'Nunito'; text-align: center; outline: none;
+        }
+        .input-field:focus { border-color: #FF9800; }
+
+        .btn-group { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
+        .diff-btn {
+            padding: 15px 25px; border-radius: 15px; border: none; font-family: 'Fredoka One';
+            font-size: 18px; color: #fff; cursor: pointer; transition: transform 0.1s;
+            box-shadow: 0 5px 0 rgba(0,0,0,0.2);
+        }
+        .diff-btn:active { transform: translateY(5px); box-shadow: none; }
+        .btn-easy { background: #8BC34A; }
+        .btn-mid { background: #FFC107; }
+        .btn-hard { background: #F44336; }
+
+        .btn-main {
+            background: linear-gradient(to bottom, #2196F3, #1976D2);
+            color: white; border: none; padding: 15px 50px;
+            font-size: 24px; border-radius: 50px; font-family: 'Fredoka One'; cursor: pointer;
+            box-shadow: 0 6px 0 #0D47A1; margin-top: 20px;
+        }
+        .btn-main:active { transform: translateY(6px); box-shadow: none; }
+
+        @media (max-width: 800px) { #game-stage { width: 100%; height: 100vh; border-radius: 0; } }
+    </style>
+</head>
+<body>
+
+    <div id="game-stage">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+        <div id="ui-layer">
+            <div id="top-bar">
+                <div style="display:flex; gap:10px;">
+                    <div class="hud-item">⭐ <span id="score">0</span></div>
+                    <div class="hud-item">
+                        <div id="battery-wrap">
+                            <div id="battery-fill"></div>
+                            <div id="battery-txt">⚡ %100</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="hud-item" id="quest-counter">Soru: 1 / 10</div>
+            </div>
+
+            <div id="question-panel">
+                <div id="q-title">...</div>
+                <div id="q-target">...</div>
+            </div>
+        </div>
+
+        <!-- GİRİŞ EKRANI -->
+        <div id="start-overlay" class="overlay">
+            <div class="modal">
+                <h1 style="color:#FF9800; font-family:'Fredoka One'; margin:0; font-size:40px;">🐼 AKIL OYUNLARI</h1>
+                <p style="font-size:18px; color:#555;">İsmini yaz ve maceraya başla!</p>
+                <p style="color:#666; font-size:14px;">Türkçe • Matematik • Görsel • Sıralama</p>
+                
+                <input type="text" id="player-name" class="input-field" placeholder="ADINIZ" maxlength="12">
+                
+                <div style="text-align:left; margin-top:10px; color:#555; font-weight:bold; margin-left: 10%;">Zorluk Seç:</div>
+                <div class="btn-group">
+                    <button class="diff-btn btn-easy" onclick="selectDifficulty('EASY')">KOLAY</button>
+                    <button class="diff-btn btn-mid" onclick="selectDifficulty('MEDIUM')">ORTA</button>
+                    <button class="diff-btn btn-hard" onclick="selectDifficulty('HARD')">ZOR</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SONUÇ EKRANI -->
+        <div id="end-overlay" class="overlay hidden">
+            <div class="modal">
+                <div id="end-icon" style="font-size:70px;">🏆</div>
+                <h1 id="end-title" style="color:#2E7D32; margin:0;">KAZANDIN!</h1>
+                <p id="end-msg" style="font-size:20px; color:#555;">Tüm soruları bildin.</p>
+                <div style="background:#f5f5f5; padding:15px; border-radius:15px; margin:20px 0;">
+                    <div style="font-size:24px; color:#FF9800; font-family:'Fredoka One';">PUAN: <span id="final-score">0</span></div>
+                </div>
+                <button class="btn-main" onclick="fullReset()">TEKRAR OYNA</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+/**
+ * PANDA V14 - TÜRKÇE & SIRALAMA MODU
+ * - Türkçe Soruları (Eş Anlam, Zıt Anlam, Hece)
+ * - Sıralama Hafızası (Short-term memory sequence)
+ * - Sorunsuz Restart (Reset Function)
+ */
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const GAME_WIDTH = 800;
+const GAME_HEIGHT = 600;
+
+// --- İÇERİK HAVUZU ---
+const ASSETS = {
+    visuals: ['🍎','🍐','🍄','🌲','🐞','🦋','🐸','🌻','🚀','🪐','⭐','👽','🦀','🐚','🐠','⚽','🎸','🎨','🎒','👓'],
+    math: [ 
+        ["2 + 3", "5", "6", "4"], ["5 - 2", "3", "2", "4"], ["4 + 4", "8", "7", "9"], 
+        ["10 - 5", "5", "4", "6"], ["3 x 2", "6", "5", "7"], ["8 ÷ 2", "4", "3", "5"],
+        ["5 + 6", "11", "10", "12"], ["15 - 7", "8", "9", "7"], ["6 x 2", "12", "14", "10"]
+    ],
+    logic: [ 
+        ["Hangisi uçar?", "🐦 Kuş", "🐱 Kedi", "🐟 Balık"],
+        ["Kışın ne giyilir?", "🧣 Atkı", "🩳 Şort", "👙 Mayo"],
+        ["Hangisi meyvedir?", "🍎 Elma", "🥦 Brokoli", "🥕 Havuç"],
+        ["Hangisi sıcak?", "☀️ Güneş", "⛄ Kardan Adam", "🍦 Dondurma"],
+        ["Okula ne ile gidilir?", "🚌 Servis", "🚀 Roket", "🚢 Gemi"]
+    ],
+    turkish: [
+        // [Soru Tipi, Kelime, Doğru, Yanlış1, Yanlış2]
+        ["Eş Anlamlısı", "Siyah", "Kara", "Beyaz", "Mavi"],
+        ["Zıt Anlamlısı", "Gel", "Git", "Koş", "Dur"],
+        ["Eş Anlamlısı", "Kırmızı", "Al", "Ak", "Mor"],
+        ["Zıt Anlamlısı", "Uzak", "Yakın", "Irak", "Yüksek"],
+        ["Eş Anlamlısı", "Okul", "Mektep", "Sınıf", "Bahçe"],
+        ["Hece Sayısı", "Kalem", "2", "1", "3"],
+        ["Hece Sayısı", "Araba", "3", "2", "4"],
+        ["Zıt Anlamlısı", "Dolu", "Boş", "Katı", "Sıvı"]
+    ]
+};
+
+// --- OYUN DURUMU ---
+let state = {
+    screen: 'MENU',
+    playerName: '',
+    difficulty: 'EASY', 
+    score: 0,
+    battery: 100,
+    questionCount: 1,
+    totalQuestions: 10,
+    distance: 0,
+    worldIndex: 0, 
+    wallX: GAME_WIDTH + 100,
+    puzzle: { grid: [], target: '', type: '' },
+    bgOffset: 0
+};
+
+// ZORLUK AYARLARI
+const DIFF_SETTINGS = {
+    EASY:   { speed: 4, options: 2, showTime: 3000, batPenalty: 10 },
+    MEDIUM: { speed: 6, options: 3, showTime: 2500, batPenalty: 20 },
+    HARD:   { speed: 9, options: 4, showTime: 1500, batPenalty: 30 }
+};
+
+// --- SES ---
+const AudioSys = {
+    ctx: null,
+    init: function() { try { window.AudioContext = window.AudioContext||window.webkitAudioContext; this.ctx = new AudioContext(); } catch(e){} },
+    play: function(type) {
+        if(!this.ctx) return;
+        try {
+            const o = this.ctx.createOscillator(); const g = this.ctx.createGain();
+            o.connect(g); g.connect(this.ctx.destination);
+            const t = this.ctx.currentTime;
+            if(type==='win') { o.type='sine'; o.frequency.setValueAtTime(600, t); g.gain.value=0.1; o.start(); o.stop(t+0.2); }
+            if(type==='lose') { o.type='sawtooth'; o.frequency.setValueAtTime(150, t); g.gain.value=0.1; o.start(); o.stop(t+0.3); }
+        } catch(e){}
+    }
+};
+
+// --- ÇİZİM YARDIMCILARI ---
+function drawRect(x, y, w, h, c, shadow=false) {
+    if(shadow) { ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.fillRect(x+5, y+5, w, h); }
+    ctx.fillStyle = c; ctx.fillRect(x, y, w, h);
+}
+function drawCircle(x, y, r, c, shadow=false) {
+    if(shadow) { ctx.beginPath(); ctx.arc(x+3, y+3, r, 0, Math.PI*2); ctx.fillStyle='rgba(0,0,0,0.2)'; ctx.fill(); }
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fillStyle = c; ctx.fill();
+}
+function drawText(txt, x, y, size, c) {
+    ctx.fillStyle = c; ctx.font = "bold "+size+"px Arial"; 
+    ctx.textAlign = "center"; ctx.textBaseline="middle"; 
+    ctx.shadowColor="rgba(0,0,0,0.3)"; ctx.shadowBlur=4;
+    ctx.fillText(txt, x, y);
+    ctx.shadowBlur=0;
+}
+
+// --- OYUN AKIŞI ---
+
+function selectDifficulty(diff) {
+    const name = document.getElementById('player-name').value.trim();
+    if(name.length < 2) { alert("Önce adını yazmalısın!"); return; }
+    
+    state.playerName = name;
+    state.difficulty = diff;
+    startGame();
+}
+
+function startGame() {
+    AudioSys.init();
+    document.getElementById('start-overlay').classList.add('hidden');
+    document.getElementById('end-overlay').classList.add('hidden');
+    
+    state.score = 0; state.battery = 100; 
+    state.questionCount = 1; state.distance = 0; state.worldIndex = 0;
+    state.wallX = GAME_WIDTH + 200;
+    state.screen = 'RUNNING';
+    
+    updateUI();
+    requestAnimationFrame(loop);
+}
+
+function fullReset() {
+    // Tam reset işlemi
+    state.screen = 'MENU';
+    document.getElementById('end-overlay').classList.add('hidden');
+    document.getElementById('start-overlay').classList.remove('hidden');
+}
+
+function createPuzzle() {
+    const settings = DIFF_SETTINGS[state.difficulty];
+    const r = Math.random();
+    
+    // Soru Tipi Ağırlıkları
+    let mode = 'VISUAL';
+    if(r < 0.20) mode = 'MATH'; 
+    else if(r < 0.40) mode = 'LOGIC';
+    else if(r < 0.65) mode = 'TURKISH'; // Türkçe
+    else if(r < 0.85) mode = 'SEQUENCE'; // Sıralama Hafızası (Yeni)
+    
+    state.puzzle.type = mode;
+    state.puzzle.grid = [];
+    
+    let opts = [];
+    let title = "";
+    let displayIcon = "";
+    
+    if(mode === 'VISUAL') {
+        let pool = [...ASSETS.visuals].sort(()=>Math.random()-0.5);
+        opts = pool.slice(0, settings.options);
+        state.puzzle.target = opts[0];
+        opts.sort(()=>Math.random()-0.5);
+        title = "İyice Bak!";
+        displayIcon = "👀";
+    } 
+    else if (mode === 'SEQUENCE') {
+        // Sıralama: 3 nesne göster, sonra yerini sor
+        let pool = [...ASSETS.visuals].sort(()=>Math.random()-0.5);
+        opts = pool.slice(0, 3); // Hep 3 tane
+        const positions = ["En Baştaki", "Ortadaki", "En Sondaki"];
+        const targetIdx = Math.floor(Math.random() * 3);
+        
+        state.puzzle.target = opts[targetIdx];
+        state.puzzle.questionTxt = positions[targetIdx] + " neydi?";
+        
+        title = "Sırayı Unutma!";
+        displayIcon = "🔢";
+        // Cevap seçenekleri için karıştırılmış hali lazım, ama gösterirken sıralı göstermeliyiz
+        // MEMORIZE aşamasında sıralı, GUESS aşamasında karışık butonlar olacak.
+        // Bunu grid yapısında halledeceğiz.
+    }
+    else if (mode === 'TURKISH') {
+        const t = ASSETS.turkish[Math.floor(Math.random()*ASSETS.turkish.length)];
+        state.puzzle.target = t[2];
+        opts = [t[2], t[3]];
+        if(settings.options > 2 && t[4]) opts.push(t[4]);
+        opts.sort(()=>Math.random()-0.5);
+        title = t[0] + ": " + t[1]; // Örn: "Eş Anlamlısı: Siyah"
+        displayIcon = "🇹🇷";
+    }
+    else if (mode === 'MATH') {
+        const m = ASSETS.math[Math.floor(Math.random()*ASSETS.math.length)];
+        state.puzzle.target = m[1];
+        opts = [m[1], m[2]];
+        if(settings.options > 2) opts.push(m[3]);
+        opts.sort(()=>Math.random()-0.5);
+        title = "İşlemi Çöz: " + m[0];
+        displayIcon = "🧮";
+    }
+    else { // LOGIC
+        const l = ASSETS.logic[Math.floor(Math.random()*ASSETS.logic.length)];
+        state.puzzle.target = l[1];
+        opts = [l[1], l[2]];
+        if(settings.options > 2) opts.push(l[3]);
+        opts.sort(()=>Math.random()-0.5);
+        title = l[0];
+        displayIcon = "🧠";
+    }
+
+    // Grid Oluştur
+    // Sequence modunda görsel hafıza için özel durum var
+    if (mode === 'SEQUENCE') {
+        // Grid'e önce sıralı ekle, sonra guess modunda karıştıracağız ya da burada guess options'ı saklayacağız.
+        // Basitlik için: Grid'e doğru sırayla koyalım.
+        let pool = [...ASSETS.visuals].sort(()=>Math.random()-0.5).slice(0, 3);
+        // Bu pool Memorize ekranında gösterilecek.
+        // Target yukarıda seçildi.
+        // Grid butonları ise cevaplar olacak.
+        // Bu mod biraz özel, createPuzzle'da sadece veri hazırlayıp, wall_incoming'de işleyelim.
+        state.puzzle.sequenceData = opts; // Sıralı veri
+    }
+
+    // Normal Grid Oluşturma (Cevap Butonları)
+    // Eğer sequence ise, cevap butonları seçeneklerin karışık halidir
+    let gridOpts = (mode === 'SEQUENCE') ? [...state.puzzle.sequenceData].sort(()=>Math.random()-0.5) : opts;
+    
+    const boxW = 130;
+    const totalW = (gridOpts.length * (boxW+20)) - 20;
+    const startX = -totalW/2;
+    
+    gridOpts.forEach((val, i) => {
+        state.puzzle.grid.push({ 
+            relX: startX + i*(boxW+20), relY: -50, 
+            w: boxW, h: boxW, val: val, visible: true 
+        });
+    });
+    
+    return { title, icon: displayIcon };
+}
+
+function loop() {
+    update();
+    draw();
+    if(state.screen !== 'GAMEOVER' && state.screen !== 'MENU') requestAnimationFrame(loop);
+}
+
+function update() {
+    const settings = DIFF_SETTINGS[state.difficulty];
+    
+    if(state.screen === 'RUNNING') {
+        state.bgOffset += settings.speed;
+        if(state.bgOffset > 800) state.bgOffset = 0;
+        state.distance += settings.speed;
+        
+        if(state.distance > 300) { 
+            state.screen = 'WALL_INCOMING';
+            const data = createPuzzle();
+            state.wallX = GAME_WIDTH + 100;
+            // Soru başlığını sakla
+            state.puzzle.tempTitle = data.title;
+            state.puzzle.tempIcon = data.icon;
+        }
+    }
+    else if(state.screen === 'WALL_INCOMING') {
+        let targetX = GAME_WIDTH / 2;
+        state.wallX += (targetX - state.wallX) * 0.1;
+        
+        if(Math.abs(state.wallX - targetX) < 5) {
+            state.wallX = targetX;
+            
+            // SORU TÜRÜNE GÖRE EKRAN AKIŞI
+            if(state.puzzle.type === 'LOGIC' || state.puzzle.type === 'MATH' || state.puzzle.type === 'TURKISH') {
+                // Bilgi soruları: Direkt soruyu göster
+                state.screen = 'GUESS';
+                showPanel(state.puzzle.tempTitle, state.puzzle.tempIcon);
+            } 
+            else if (state.puzzle.type === 'SEQUENCE') {
+                // Sıralama: Önce sırayı göster
+                state.screen = 'MEMORIZE';
+                // Panelde sıralı öğeleri göstermek yerine grid'i kullanacağız ama özel çizim lazım
+                showPanel("Sırayı Ezberle!", "1-2-3");
+                setTimeout(() => {
+                    if(state.screen === 'MEMORIZE') {
+                        state.screen = 'GUESS';
+                        // Kartları gizle (içerik kapanacak)
+                        state.puzzle.grid.forEach(b => b.visible = false);
+                        showPanel(state.puzzle.questionTxt, "❓");
+                    }
+                }, settings.showTime + 1000); // Biraz daha uzun süre
+            }
+            else {
+                // Görsel: Ezberle
+                state.screen = 'MEMORIZE';
+                showPanel("Ezberle!", "👀");
+                setTimeout(() => {
+                    if(state.screen === 'MEMORIZE') {
+                        state.screen = 'GUESS';
+                        state.puzzle.grid.forEach(b => b.visible = false);
+                        showPanel("Bunu Bul:", state.puzzle.target);
+                    }
+                }, settings.showTime);
+            }
+        }
+    }
+    else if(state.screen === 'SUCCESS_ANIM') {
+        state.wallX += 20;
+        if(state.wallX > GAME_WIDTH + 300) {
+            if(state.questionCount >= state.totalQuestions) {
+                endGame(true);
+            } else {
+                state.questionCount++;
+                if(state.questionCount === 4) state.worldIndex = 1;
+                if(state.questionCount === 8) state.worldIndex = 2;
+                state.distance = 0;
+                state.screen = 'RUNNING';
+                updateUI();
+            }
+        }
+    }
+}
+
+function draw() {
+    // 1. ARKA PLAN
+    const worldColors = [
+        ['#81C784', '#388E3C'], // Orman
+        ['#4FC3F7', '#FFC107'], // Sahil
+        ['#263238', '#546E7A']  // Uzay
+    ];
+    const c = worldColors[state.worldIndex];
+    drawRect(0, 0, GAME_WIDTH, GAME_HEIGHT, c[0]); 
+    drawRect(0, GAME_HEIGHT-120, GAME_WIDTH, 120, c[1]);
+    
+    // Dekorlar
+    for(let i=0; i<4; i++) {
+        let x = (i*250) - state.bgOffset;
+        if(x < -100) x += 1000;
+        if(state.worldIndex === 0) { 
+            drawRect(x, GAME_HEIGHT-200, 30, 80, '#5D4037'); drawCircle(x+15, GAME_HEIGHT-210, 50, '#2E7D32');
+        } else if (state.worldIndex === 1) { 
+            drawCircle(700, 100, 40, '#FFEB3B', true); drawRect(x, GAME_HEIGHT-200, 20, 100, '#795548'); drawCircle(x+10, GAME_HEIGHT-210, 40, '#4CAF50');
+        } else { 
+            drawCircle(x, Math.random()*300, 3, '#fff'); drawCircle(x+100, Math.random()*300, 2, '#fff');
+        }
+    }
+
+    // 2. PANDA
+    const py = GAME_HEIGHT - 140;
+    const bounce = state.screen === 'RUNNING' ? Math.sin(Date.now()/100)*10 : 0;
+    drawCircle(100, py + bounce, 40, '#fff', true);
+    if(state.screen === 'RUNNING') {
+        let leg = Math.sin(Date.now()/50)*15; drawCircle(80 + leg, py+45, 12, '#333'); drawCircle(120 - leg, py+45, 12, '#333');
+    } else { drawCircle(80, py+45, 12, '#333'); drawCircle(120, py+45, 12, '#333'); }
+    drawCircle(100, py - 40 + bounce, 35, '#fff', true);
+    drawCircle(80, py - 65 + bounce, 12, '#333'); drawCircle(120, py - 65 + bounce, 12, '#333');
+    drawCircle(90, py - 45 + bounce, 8, '#333'); drawCircle(110, py - 45 + bounce, 8, '#333'); drawCircle(100, py - 30 + bounce, 5, '#333');
+
+    // 3. DUVAR & KARTLAR
+    if(state.screen !== 'RUNNING') {
+        const wx = state.wallX;
+        const wy = GAME_HEIGHT / 2;
+        
+        drawRect(wx - 300, wy - 150, 600, 300, '#795548', true);
+        drawRect(wx - 280, wy - 130, 560, 260, '#5D4037');
+
+        // Sequence Modunda MEMORIZE ekranında özel çizim (Sıralı Gösterim)
+        if(state.puzzle.type === 'SEQUENCE' && state.screen === 'MEMORIZE') {
+            const seqData = state.puzzle.sequenceData;
+            seqData.forEach((item, i) => {
+                const bx = wx - 150 + (i * 110);
+                drawRect(bx, wy - 50, 100, 100, '#fff', true);
+                drawText(item, bx + 50, wy, 40, '#333');
+                drawText((i+1)+".", bx + 50, wy + 70, 20, '#d35400');
+            });
+        } 
+        else {
+            // Normal Grid Çizimi
+            state.puzzle.grid.forEach(box => {
+                const bx = wx + box.relX;
+                const by = wy + box.relY;
+                drawRect(bx, by, box.w, box.h, '#fff', true);
+                
+                if(state.screen === 'MEMORIZE' || state.screen === 'GUESS') {
+                    if(box.visible || state.puzzle.type !== 'VISUAL' && state.puzzle.type !== 'SEQUENCE') {
+                        let fSize = (state.puzzle.type === 'LOGIC' || state.puzzle.type === 'TURKISH') ? 18 : 40;
+                        drawText(box.val, bx + box.w/2, by + box.h/2, fSize, '#333');
+                    } else {
+                        drawText("?", bx + box.w/2, by + box.h/2, 50, '#FF9800');
+                    }
+                }
+            });
+        }
+    }
+}
+
+// --- INPUT ---
+canvas.addEventListener('pointerdown', (e) => {
+    if(state.screen !== 'GUESS') return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const clickX = (e.clientX - rect.left) * (GAME_WIDTH / rect.width);
+    const clickY = (e.clientY - rect.top) * (GAME_HEIGHT / rect.height);
+    const wy = GAME_HEIGHT / 2;
+    const settings = DIFF_SETTINGS[state.difficulty];
+
+    state.puzzle.grid.forEach(box => {
+        const bx = state.wallX + box.relX;
+        const by = wy + box.relY;
+        
+        if(clickX > bx && clickX < bx + box.w && clickY > by && clickY < by + box.h) {
+            if(box.val === state.puzzle.target) {
+                state.score += 50;
+                AudioSys.play('win');
+                showPanel("HARİKA!", "🎉");
+                state.screen = 'SUCCESS_ANIM';
+                setTimeout(hidePanel, 1500);
+            } else {
+                state.battery -= settings.batPenalty;
+                AudioSys.play('lose');
+                showPanel("YANLIŞ", "❌");
+                updateUI();
+                if(state.battery <= 0) endGame(false);
+            }
+        }
+    });
+});
+
+// --- YARDIMCILAR ---
+function updateUI() {
+    document.getElementById('score').innerText = state.score;
+    document.getElementById('quest-counter').innerText = `Soru: ${state.questionCount} / ${state.totalQuestions}`;
+    const pct = state.battery;
+    document.getElementById('battery-fill').style.width = pct + '%';
+    document.getElementById('battery-txt').innerText = '⚡ %' + pct;
+    const fill = document.getElementById('battery-fill');
+    if(pct > 50) fill.style.background = '#4CAF50';
+    else if(pct > 20) fill.style.background = '#FF9800';
+    else fill.style.background = '#F44336';
+}
+
+function showPanel(t, icon) {
+    document.getElementById('q-title').innerText = t;
+    document.getElementById('q-target').innerText = icon;
+    document.getElementById('question-panel').classList.add('active');
+}
+function hidePanel() { document.getElementById('question-panel').classList.remove('active'); }
+
+function endGame(win) {
+    state.screen = 'GAMEOVER';
+    hidePanel();
+    const overlay = document.getElementById('end-overlay');
+    overlay.classList.remove('hidden');
+    document.getElementById('end-icon').innerText = win ? "🏆" : "🪫";
+    document.getElementById('end-title').innerText = win ? "HARİKASIN!" : "ENERJİ BİTTİ";
+    document.getElementById('end-title').style.color = win ? "#2E7D32" : "#D32F2F";
+    document.getElementById('end-msg').innerText = win ? `Tebrikler ${state.playerName}!` : "Bir dahakine başaracaksın!";
+    document.getElementById('final-score').innerText = state.score;
+}
+
+</script>
+</body>
+</html>
+
